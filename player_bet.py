@@ -27,7 +27,6 @@ class SimpleBet:
             fold_action = 'check'
 
         if win_call_cost - loss_call_cost > self.call_cost:
-            # TODO not currently multiple of big blind
             if win_call_cost > loss_call_cost + self.raise_cost:
                 bet = curr_max_bet + (big_blind * round((self.opponent_risk * risk) - (1 - risk)))
                 action = 'raise'
