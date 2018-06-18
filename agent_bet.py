@@ -3,18 +3,25 @@ import pandas as pd
 from PokerBot.agent_base import PokerAgentBase
 
 
+# TODO Check stuck in loop - fairly sure is now fixed
+# TODO Check out of list error - fixed with try for now but need to simulate again probably 10m
+# TODO Negative bets - done initialized self.bet
+
 class PokerAgent(PokerAgentBase):
     def player_actions(self):
         remove_list = []
         for player in self.player_list:
             action, bet = player.decide_action(game_state=self.game_state, big_blind=self.big_blind,
                                                curr_table=self.curr_pot, curr_max_bet=self.curr_max_bet)
+            print('name', player.name, 'curr_money', player.curr_money, 'start_money', player.start_money, 'action',
+                  action, 'bet', bet, 'curr_bet',
+                  player.curr_bet, 'max_bet', self.curr_max_bet, 'curr_pot', self.curr_pot)
             if action == 'fold':
                 remove_list.append(player)
                 if len(self.player_list) - len(remove_list) == 1:
                     break
                 continue
-            #TODO this should all be on player?
+            # TODO this should all be on player?
             # player.curr_money -= bet
             self.curr_pot += bet
             self.curr_max_bet = max(self.curr_max_bet, player.curr_bet)
@@ -37,6 +44,7 @@ class PokerAgent(PokerAgentBase):
     def initialize_game(self):
         for player in self.starting_player_list:
             player.start_money = player.curr_money
+            player.curr_bet = 0
         self.player_list = self.starting_player_list
         self.curr_pot = 0
         self.curr_pot = self.big_blind + self.small_blind
@@ -65,7 +73,7 @@ class PokerAgent(PokerAgentBase):
         ranks_sort.sort()
         if len(m_l) == 1:
             self.player_list[m_l[0]].curr_money += (max_bet - sec_bet)
-            self.curr_pot -= (max_bet - sec_bet)
+            self.curr_pot = self.curr_pot - (max_bet - sec_bet)
             self.player_list[m_l[0]].curr_bet = sec_bet
             ###TODO Finish this off - too complicated for now
             # curr_rank = 0
@@ -140,7 +148,7 @@ class PokerAgent(PokerAgentBase):
             print(hand_counter)
             self.run_game()
             for player in self.starting_player_list:
-                print(player.curr_money, player.curr_bet)
+                print(player.name, player.curr_money, player.curr_bet, self.curr_pot)
                 if player.curr_money == 0:
                     self.starting_player_list.remove(player)
             if hand_counter % 100 == 0:
@@ -149,6 +157,7 @@ class PokerAgent(PokerAgentBase):
             hand_counter += 1
         print('finished')
         print(self.starting_player_list[0].curr_money, self.starting_player_list[0].name)
+
 
 if __name__ == '__main__':
     pkr = PokerAgent(5)

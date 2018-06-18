@@ -30,10 +30,16 @@ class SimpleBet:
             if win_call_cost > loss_call_cost + self.raise_cost:
                 bet = curr_max_bet + (big_blind * round((self.opponent_risk * risk) - (1 - risk)))
                 action = 'raise'
+                bet = max(bet, curr_max_bet - curr_self_bet)
             else:
                 bet = curr_max_bet - curr_self_bet
                 action = call_action
         else:
             bet = 0
             action = fold_action
+
+        if bet <-1:
+            print(bet, curr_max_bet, curr_self_bet)
+            raise(ValueError, 'Cant bet negative')
+
         return action, bet

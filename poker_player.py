@@ -28,11 +28,29 @@ class PokerPlayer:
         #                              4)
         # call_risk AND raise_risk
 
+    def table_risk(self, game_state):
+        state_df = self.stat_dict[game_state].values
+
+        if game_state == 'opening_state':
+            risk = 0
+
+        stat_array = state_df[np.all(state_df[:, 4:-2] == np.array(self.curr_state)[4:], axis=1), -2:].sum(axis = 0)
+        return stat_array[1]/stat_array[0]
+
+
     def decide_action(self, game_state, big_blind, curr_max_bet, curr_table):
         state_df = self.stat_dict[game_state].values
 
-        stat_array = state_df[np.all(state_df[:, :-2] == np.array(self.curr_state), axis=1), -2:][0]
-        risk = stat_array[1] / stat_array[0]
+        if self.start_money < 0:
+            raise(ValueError, "Can't be in debt")
+
+        try:
+            stat_array = state_df[np.all(state_df[:, :-2] == np.array(self.curr_state), axis=1), -2:][0]
+            risk = stat_array[1] / stat_array[0]
+
+        except Exception as e:
+            print(e)
+            risk = 0.5
 
         self.previous_action, bet = self.betting_obj.action(risk=risk, big_blind=big_blind, curr_max_bet=curr_max_bet,
                                                             curr_table=curr_table, curr_self_bet=self.curr_bet)
@@ -48,3 +66,10 @@ class PokerPlayer:
         self.curr_money -= bet
 
         return self.previous_action, bet
+
+if __name__ == '__main__':
+    pkr = PokerPlayer()
+    pkr.curr_state = [1,3,2,2,2,1,1,1,2,2]
+    print(pkr.table_risk('final_state'))
+
+    # print(a)
