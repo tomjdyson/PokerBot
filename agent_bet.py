@@ -6,16 +6,27 @@ from PokerBot.agent_base import PokerAgentBase
 # TODO Check stuck in loop - fairly sure is now fixed
 # TODO Check out of list error - fixed with try for now but need to simulate again probably 10m
 # TODO Negative bets - done initialized self.bet
+# TODO round reward money
+# TODO Side pots
+# TODO Change single max bet to single max raise and make it work
+
 
 class PokerAgent(PokerAgentBase):
     def player_actions(self):
         remove_list = []
         for player in self.player_list:
             action, bet = player.decide_action(game_state=self.game_state, big_blind=self.big_blind,
-                                               curr_table=self.curr_pot, curr_max_bet=self.curr_max_bet)
-            print('name', player.name, 'curr_money', player.curr_money, 'start_money', player.start_money, 'action',
-                  action, 'bet', bet, 'curr_bet',
-                  player.curr_bet, 'max_bet', self.curr_max_bet, 'curr_pot', self.curr_pot)
+                                               curr_table=self.curr_pot, curr_max_bet=self.curr_max_bet,
+                                               remaining_player_hands=len(self.player_list),
+                                               remaining_players_tournament=len(self.starting_player_list),
+                                               hand_lowest_money=min(
+                                                   [player.start_money for player in self.player_list]),
+                                               single_max_raise=self.single_max_raise)
+            if player.curr_money < 0:
+                raise (ValueError, 'more than money')
+            # print('name', player.name, 'curr_money', player.curr_money, 'start_money', player.start_money, 'action',
+            #       action, 'bet', bet, 'curr_bet',
+            #       player.curr_bet, 'max_bet', self.curr_max_bet, 'curr_pot', self.curr_pot)
             if action == 'fold':
                 remove_list.append(player)
                 if len(self.player_list) - len(remove_list) == 1:
@@ -24,7 +35,10 @@ class PokerAgent(PokerAgentBase):
             # TODO this should all be on player?
             # player.curr_money -= bet
             self.curr_pot += bet
+            self.single_max_raise = max(self.single_max_raise, self.curr_max_bet - player.curr_bet)
             self.curr_max_bet = max(self.curr_max_bet, player.curr_bet)
+            if player.curr_bet > player.start_money:
+                raise (ValueError, 'more than money')
         [self.player_list.remove(player) for player in remove_list]
 
     def all_players_bet(self):
@@ -43,17 +57,26 @@ class PokerAgent(PokerAgentBase):
 
     def initialize_game(self):
         for player in self.starting_player_list:
+            if player.curr_money < 0:
+                raise (ValueError, 'in debt')
             player.start_money = player.curr_money
             player.curr_bet = 0
         self.player_list = self.starting_player_list
         self.curr_pot = 0
         self.curr_pot = self.big_blind + self.small_blind
         self.curr_max_bet = self.big_blind
+        self.single_max_raise = self.big_blind
+        # Cant handle when someone leaves tournament but is fine for now
+        if self.dealer == len(self.starting_player_list):
+            self.dealer = 0
+        else:
+            self.dealer += 1
         self.player_list = self.player_list[self.dealer + 2:] + self.player_list[:self.dealer + 2]
-        self.player_list[-1].curr_bet = self.big_blind
-        self.player_list[-1].curr_money -= self.big_blind
-        self.player_list[-2].curr_bet = self.small_blind
-        self.player_list[-2].curr_money -= self.small_blind
+
+        self.player_list[-1].curr_bet = min(self.big_blind, self.player_list[-1].start_money)
+        self.player_list[-1].curr_money -= min(self.big_blind, self.player_list[-1].start_money)
+        self.player_list[-2].curr_bet = min(self.small_blind, self.player_list[-2].start_money)
+        self.player_list[-2].curr_money -= min(self.small_blind, self.player_list[-2].start_money)
 
     def run_betting(self):
         if len(self.player_list) > 1:
@@ -110,7 +133,7 @@ class PokerAgent(PokerAgentBase):
             self.side_pool()
 
         if result == 'draw':
-            money_amount = self.curr_pot / len(player_list)
+            money_amount = round(self.curr_pot / len(player_list))
             for player in player_list:
                 player.curr_money += money_amount
         else:
@@ -145,21 +168,53 @@ class PokerAgent(PokerAgentBase):
     def run_tournament(self):
         hand_counter = 1
         while len(self.starting_player_list) > 1:
-            print(hand_counter)
+            # print(hand/_counter)
             self.run_game()
             for player in self.starting_player_list:
-                print(player.name, player.curr_money, player.curr_bet, self.curr_pot)
+                # print(player.name, player.curr_money, player.curr_bet, self.curr_pot)
                 if player.curr_money == 0:
                     self.starting_player_list.remove(player)
+                if player.curr_money < 0:
+                    ValueError('Cant be in debt')
             if hand_counter % 100 == 0:
                 self.big_blind *= 2
                 self.small_blind *= 2
             hand_counter += 1
-        print('finished')
-        print(self.starting_player_list[0].curr_money, self.starting_player_list[0].name)
+
+        # print('finished')
+        # print(self.starting_player_list[0].curr_money, self.starting_player_list[0].name,
+        #       self.starting_player_list[0].tournament_hands)
+        print(self.starting_player_list[0].name)
+        return self.starting_player_list[0].tournament_hands
+
+
+def simulate_tournaments(n):
+    simulate = []
+    for i in range(n):
+        pkr = PokerAgent(5)
+        simulate.append(pkr.run_tournament())
+        # print(i)
+    # TODO Better way for this
+    flat_list = [item for sublist in simulate for item in sublist]
+    df = pd.DataFrame(flat_list)
+
+    return df
 
 
 if __name__ == '__main__':
-    pkr = PokerAgent(5)
-    a = pkr.run_tournament()
+    from multiprocessing import Pool
+
+    # game_obj = PokerAgent(5)
+    # print(game_obj.run_tournament())
+
+    simulate_tournaments(5).to_csv('tournament_model_data.csv')
+
+    # with Pool(3) as p:
+    #     a, b, c = p.map(simulate_tournaments, [100, 100, 100])
+    #
+    # pd.concat([a, b, c], axis=0).to_csv('tournament_model_data.csv')
+
+
+
+    # simulate_tournaments(10).to_csv('tournament_data.csv')
     # print(a)

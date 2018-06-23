@@ -5,11 +5,11 @@ from PokerBot.poker_player import PokerPlayer
 
 class PokerAgentBase:
     def __init__(self, num_players):
-        self.player_1 = PokerPlayer()
-        self.player_2 = PokerPlayer()
-        self.player_3 = PokerPlayer()
-        self.player_4 = PokerPlayer()
-        self.player_5 = PokerPlayer()
+        self.player_1 = PokerPlayer('a')
+        self.player_2 = PokerPlayer('b')
+        self.player_3 = PokerPlayer('c')
+        self.player_4 = PokerPlayer('d')
+        self.player_5 = PokerPlayer('f', bet_style='model')
         # todo setter
         self.player_list = [self.player_1, self.player_2, self.player_3, self.player_4, self.player_5][0:num_players]
         self.starting_player_list = self.player_list
@@ -25,7 +25,9 @@ class PokerAgentBase:
         self.curr_pot = self.big_blind + self.small_blind
         self.stat_dict = {'opening_state': [], 'flop_state': [], 'turn_state': [], 'final_state': []}
         self.curr_max_bet = 0
+        self.single_max_raise = 0
         self.game_state = None
+
 
     @staticmethod
     def create_cards():
