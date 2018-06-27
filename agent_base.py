@@ -1,17 +1,19 @@
 import numpy as np
 from collections import Counter
 from PokerBot.poker_player import PokerPlayer
+from random import shuffle
 
 
 class PokerAgentBase:
-    def __init__(self, num_players):
+    def __init__(self, num_players, action_clf=None, bet_clf=None):
         self.player_1 = PokerPlayer('a')
         self.player_2 = PokerPlayer('b')
         self.player_3 = PokerPlayer('c')
         self.player_4 = PokerPlayer('d')
-        self.player_5 = PokerPlayer('f', bet_style='model')
+        self.player_5 = PokerPlayer('f', bet_style='model', action_clf=action_clf, bet_clf=bet_clf)
         # todo setter
         self.player_list = [self.player_1, self.player_2, self.player_3, self.player_4, self.player_5][0:num_players]
+        shuffle(self.player_list)
         self.starting_player_list = self.player_list
         self.dealer = np.random.randint(0, num_players)
         self.small_blind = 1
@@ -27,7 +29,6 @@ class PokerAgentBase:
         self.curr_max_bet = 0
         self.single_max_raise = 0
         self.game_state = None
-
 
     @staticmethod
     def create_cards():
@@ -163,7 +164,13 @@ class PokerAgentBase:
             return flush_high + pairs + straight + flush, flush_rank
 
     def find_best(self):
-        top_rank = min([i.curr_rank for i in self.player_list])
+        try:
+            top_rank = min([i.curr_rank for i in self.player_list])
+        except Exception as e:
+            # print([player.name for player in self.player_list])
+            print(self.curr_max_bet, self.big_blind, self.small_blind)
+            print({player.name : [player.previous_action, player.curr_bet] for player in self.starting_player_list})
+            raise e
         if Counter([i.curr_rank for i in self.player_list])[top_rank] > 1:
             drawn_rank = [i for i in self.player_list if i.curr_rank == top_rank]
             highest_card = max([i.curr_state[0] for i in drawn_rank])

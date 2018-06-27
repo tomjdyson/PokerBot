@@ -4,7 +4,7 @@ import pandas as pd
 
 
 class PokerPlayer:
-    def __init__(self, name, bet_style='simple'):
+    def __init__(self, name, bet_style='simple', action_clf = None, bet_clf = None):
         # self.name = np.random.choice(
         #     ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't'], 1)
         self.name = name
@@ -29,11 +29,11 @@ class PokerPlayer:
 
         if bet_style == 'simple':
 
-            self.betting_obj = SimpleBet(np.random.randint(-80, -30) / 10, np.random.randint(-29, 20) / 10,
+            self.betting_obj = SimpleBet(np.random.randint(-100, -40) / 10, np.random.randint(-39, 20) / 10,
                                          np.random.randint(1, 1000) / 10)
 
         else:
-            self.betting_obj = SimpleModelBet(None)
+            self.betting_obj = SimpleModelBet(action_clf = action_clf, bet_clf = bet_clf)
             # self.betting_obj = SimpleBet(-1000, -500,
             #                              4)
             # call_risk AND raise_risk
