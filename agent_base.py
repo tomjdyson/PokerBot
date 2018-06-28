@@ -1,7 +1,7 @@
 import numpy as np
 from collections import Counter
 from PokerBot.poker_player import PokerPlayer
-from random import shuffle
+from random import shuffle, randint
 
 
 class PokerAgentBase:
@@ -10,7 +10,8 @@ class PokerAgentBase:
         self.player_2 = PokerPlayer('b')
         self.player_3 = PokerPlayer('c')
         self.player_4 = PokerPlayer('d')
-        self.player_5 = PokerPlayer('f', bet_style='model', action_clf=action_clf, bet_clf=bet_clf)
+        self.player_5 = PokerPlayer('f')
+        # self.player_5 = PokerPlayer('f', bet_style='model', action_clf=action_clf, bet_clf=bet_clf)
         # todo setter
         self.player_list = [self.player_1, self.player_2, self.player_3, self.player_4, self.player_5][0:num_players]
         shuffle(self.player_list)
@@ -39,14 +40,7 @@ class PokerAgentBase:
         return cards
 
     def pick_cards(self, n):
-        # fastest can be currently made
-        cards = [self.remaining_cards[j] for j in np.random.choice(len(self.remaining_cards), n, replace=False)]
-        [self.remaining_cards.remove(j) for j in cards]
-        # TODO
-        # for i in range(5):
-
-        # cards = [self.cards.pop(random.choice(self.cards)) for i in range(5)]
-
+        cards = [self.remaining_cards.pop(randint(0, len(self.remaining_cards) - 1)) for i in range(n)]
         return cards
 
     @staticmethod
