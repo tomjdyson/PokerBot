@@ -72,8 +72,10 @@ class PokerAgent(PokerAgentBase):
         else:
             self.dealer += 1
         if len(self.player_list) > 2:
-            big_blind_pos = self.dealer - (len(self.player_list) - 2) if self.dealer >= (len(self.player_list) - 2) else self.dealer + 2
-            small_blind_pos = self.dealer - (len(self.player_list) - 1) if self.dealer >= (len(self.player_list) - 1) else self.dealer + 1
+            big_blind_pos = self.dealer - (len(self.player_list) - 2) if self.dealer >= (
+            len(self.player_list) - 2) else self.dealer + 2
+            small_blind_pos = self.dealer - (len(self.player_list) - 1) if self.dealer >= (
+            len(self.player_list) - 1) else self.dealer + 1
             self.player_list = self.starting_player_list[big_blind_pos + 1:] + self.starting_player_list[
                                                                                :big_blind_pos + 1]
 
@@ -82,6 +84,8 @@ class PokerAgent(PokerAgentBase):
             big_blind_pos = (self.dealer + 1) % 2
             # TODO This might not work - need to look at heads up rules who starts betting
             self.player_list = [self.starting_player_list[small_blind_pos]] + [self.starting_player_list[big_blind_pos]]
+            # print('Starting location:' , [player.name for player in self.starting_player_list])
+            # print('Dealer Location:',[player.name for player in self.player_list], big_blind_pos, small_blind_pos)
 
         self.starting_player_list[big_blind_pos].curr_bet = min(self.big_blind,
                                                                 self.starting_player_list[big_blind_pos].start_money)
@@ -93,6 +97,8 @@ class PokerAgent(PokerAgentBase):
             small_blind_pos].start_money)
 
         self.curr_max_bet = max(player.curr_bet for player in self.starting_player_list)
+        # if len(self.starting_player_list) == 2:
+        #     print({player.name:[player.curr_bet, player.curr_money] for player in self.starting_player_list})
 
         # print('Starting location:' , [player.name for player in self.starting_player_list])
         # print('Dealer Location:',[player.name for player in self.player_list], big_blind_pos, small_blind_pos)
@@ -210,9 +216,11 @@ class PokerAgent(PokerAgentBase):
 def simulate_tournaments(n):
     simulate = []
     winners = []
-    rf_clf = RFModel('C:/Users/dysont/Documents/Graduate/rl/PokerBot/tournament_data_2.csv', 1000000)
+    rf_clf = RFModel('C:/Users/dysont/Documents/Graduate/rl/PokerBot/tournament_data_4.csv', 1000000)
     action_clf = rf_clf.action_model()
     bet_clf = rf_clf.bet_model()
+    # action_clf = None
+    # bet_clf = None
     for i in range(n):
         pkr = PokerAgent(5, action_clf=action_clf, bet_clf=bet_clf)
         winner = pkr.run_tournament()[0]
@@ -229,11 +237,15 @@ def simulate_tournaments(n):
 
 if __name__ == '__main__':
     from multiprocessing import Pool
-
+    import time
     # game_obj = PokerAgent(5)
     # print(game_obj.run_tournament())
-    # for i in [1, 2, 3]:
-    simulate_tournaments(10000).to_csv('tournament_data_3.csv')
+    for i in range(5):
+    # start_time = time.time()
+    # simulate_tournaments(100)
+    # print("--- %s seconds ---" % (time.time() - start_time))
+    # print((time.time() - start_time) / 100)
+        simulate_tournaments(3000).to_csv('tournament_data_4.csv')
 
     # with Pool(3) as p:
     #     a, b, c = p.map(simulate_tournaments, [500, 500, 500])
