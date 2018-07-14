@@ -77,9 +77,10 @@ class SimpleNN:
         print(self.train_data.groupby('action').curr_money.count())
         self.train_data = pd.concat([self.train_data[self.train_data.action == 0].sample(500000),
                                      self.train_data[self.train_data.action == 1].sample(500000),
-                                     self.train_data[self.train_data.action == 2].sample(500000),])
+                                     self.train_data[self.train_data.action == 2].sample(500000), ])
         # self.train_x = self.train_data.drop(['Unnamed: 0', 'bet', 'player', 'action', 'single_max_raise', ],
         #                                     axis=1).values
+        self.train_data = self.train_data.sample(frac = 1)
         self.train_x = self.train_data[
             ['curr_bet', 'curr_money', 'curr_pot', 'remaining_players_tournament', 'net_risk',
              'vips_1', 'vips_2', 'vips_3', 'vips_4', 'vips_5', ]]
@@ -147,7 +148,8 @@ class SimpleNN:
                         # print(c)
                         # print(avg_cost, type(avg_cost))
                         if np.isnan(np.min(c)):
-                            print(i)
+                            print(i, c, np.min(c))
+                            print(batch_x, batch_y)
                             raise ValueError
 
                             # print('batch : {}, cost : {}'.format(i, c))
@@ -155,6 +157,15 @@ class SimpleNN:
                         self.saver.save(sess, self.checkpoint_prefix, global_step=epoch)
                     print("Epoch:", '%04d' % (epoch + 1), "cost=",
                           "{:.9f}".format(avg_cost / self.epoch_len))
+                    index = np.random.randint(0, self.train_x.shape[0])
+                    curr_x = self.train_x[index - 100: index]
+
+                    preds = sess.run([self.predicter], feed_dict={
+                        self.x: curr_x,
+                        self.keep_prob: 1
+                    })
+                    print(preds)
+
                 print("Optimization Finished!")
 
     def predict(self, number):

@@ -13,8 +13,8 @@ class PokerAgentBase:
         self.player_2 = PokerPlayer('b')
         self.player_3 = PokerPlayer('c')
         self.player_4 = PokerPlayer('d')
-        # self.player_5 = PokerPlayer('f')
-        self.player_5 = PokerPlayer('f', bet_style='model', action_clf=action_clf, bet_clf=bet_clf)
+        self.player_5 = PokerPlayer('f')
+        # self.player_5 = PokerPlayer('f', bet_style='model', action_clf=action_clf, bet_clf=bet_clf)
         # todo setter
         self.player_list = [self.player_1, self.player_2, self.player_3, self.player_4, self.player_5][0:num_players]
         shuffle(self.player_list)

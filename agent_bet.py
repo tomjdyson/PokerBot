@@ -78,6 +78,7 @@ class PokerAgent(PokerAgentBase):
                 raise (ValueError, 'in debt')
             player.start_money = player.curr_money
             player.curr_bet = 0
+            player.game_hands = []
         self.player_list = self.starting_player_list
         self.curr_pot = 0
         self.curr_pot = self.big_blind + self.small_blind
@@ -101,6 +102,10 @@ class PokerAgent(PokerAgentBase):
             big_blind_pos = (self.dealer + 1) % 2
             # TODO This might not work - need to look at heads up rules who starts betting
             self.player_list = [self.starting_player_list[small_blind_pos]] + [self.starting_player_list[big_blind_pos]]
+            print('small_blind', self.starting_player_list[small_blind_pos].name,
+                  self.starting_player_list[small_blind_pos].curr_money)
+            print('big_blind', self.starting_player_list[big_blind_pos].name,
+                  self.starting_player_list[big_blind_pos].curr_money)
             # print('Starting location:' , [player.name for player in self.starting_player_list])
             # print('Dealer Location:',[player.name for player in self.player_list], big_blind_pos, small_blind_pos)
 
@@ -108,6 +113,7 @@ class PokerAgent(PokerAgentBase):
                                                                 self.starting_player_list[big_blind_pos].start_money)
         self.starting_player_list[big_blind_pos].curr_money -= min(self.big_blind,
                                                                    self.starting_player_list[big_blind_pos].start_money)
+
         self.starting_player_list[small_blind_pos].curr_bet = min(self.small_blind, self.starting_player_list[
             small_blind_pos].start_money)
         self.starting_player_list[small_blind_pos].curr_money -= min(self.small_blind, self.starting_player_list[
@@ -115,12 +121,6 @@ class PokerAgent(PokerAgentBase):
 
         self.curr_max_bet = max(player.curr_bet for player in self.starting_player_list)
         self.times['initialize'] += (time.time() - start_time)
-
-        # if len(self.starting_player_list) == 2:
-        #     print({player.name:[player.curr_bet, player.curr_money] for player in self.starting_player_list})
-
-        # print('Starting location:' , [player.name for player in self.starting_player_list])
-        # print('Dealer Location:',[player.name for player in self.player_list], big_blind_pos, small_blind_pos)
 
     def run_betting(self):
         start_time = time.time()
@@ -234,7 +234,39 @@ class PokerAgent(PokerAgentBase):
                 self.big_blind *= 2
                 self.small_blind *= 2
             hand_counter += 1
+        return self.starting_player_list
 
+    def rl_reward(self, player, min, max):
+        new_min_pos = player.curr_money - min
+        new_max_pos = max - player.curr_money
+
+        if new_min_pos >= player.min_pos:
+            player.train()
+
+        elif new_max_pos <= player.max_pos:
+            player.train()
+
+        player.min_pos = new_min_pos
+        player.max_pos = new_max_pos
+
+    def run_tournament_rl(self):
+        hand_counter = 1
+        while len(self.starting_player_list) > 1:
+            # print(hand/_counter)
+            self.run_game()
+            curr_min = min([player.curr_money for player in self.starting_player_list])
+            curr_max = min([player.curr_money for player in self.starting_player_list])
+            for player in self.starting_player_list:
+                # print(player.name, player.curr_money, player.curr_bet, self.curr_pot)
+                self.rl_reward(player, max=curr_max, min=curr_min)
+                if player.curr_money == 0:
+                    self.starting_player_list.remove(player)
+                if player.curr_money < 0:
+                    ValueError('Cant be in debt')
+            if hand_counter % 50 == 0:
+                self.big_blind *= 2
+                self.small_blind *= 2
+            hand_counter += 1
         # print('finished')
         # print(self.starting_player_list[0].curr_money, self.starting_player_list[0].name,
         #       self.starting_player_list[0].tournament_hands)
@@ -268,14 +300,14 @@ if __name__ == '__main__':
     from multiprocessing import Pool
     import time
 
-    # game_obj = PokerAgent(5)
-    # print(game_obj.run_tournament())
+    game_obj = PokerAgent(5)
+    print(game_obj.run_tournament_rl()[0].name)
     # for i in range(3):
     # start_time = time.time()
     # simulate_tournaments(100)
     # print("--- %s seconds ---" % (time.time() - start_time))
     # print((time.time() - start_time) / 100)
-    simulate_tournaments(100).to_csv('tournament_nn.csv')
+    # simulate_tournaments(10).to_csv('tournament_nn.csv')
 
     # with Pool(3) as p:
     #     a, b, c = p.map(simulate_tournaments, [500, 500, 500])
