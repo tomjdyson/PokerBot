@@ -2,8 +2,9 @@ import numpy as np
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 import pickle
 import pandas as pd
+import tensorflow as tf
 
-
+#TODO Close tf sessions
 class SimpleBet:
     def __init__(self, call_cost, raise_cost, opponent_risk):
         self.call_cost = call_cost
@@ -11,7 +12,7 @@ class SimpleBet:
         self.opponent_risk = opponent_risk
 
     def action(self, self_risk, table_risk, curr_money, max_bet, remaining_players_hand, curr_pot,
-               remaining_players_tournament, hand_lowest_money, curr_bet, big_blind, single_max_raise):
+               remaining_players_tournament, hand_lowest_money, curr_bet, big_blind, single_max_raise, new_vips_list):
         # must bet same amount as big blind
         win_call_cost = (curr_pot - curr_bet) * self_risk
         loss_call_cost = max_bet * (1 - self_risk)
@@ -37,30 +38,26 @@ class SimpleBet:
             bet = 0
             action = fold_action
 
-        if bet < -1:
-            print(bet, max_bet, curr_bet)
-            raise (ValueError, 'Cant bet negative')
+        # if bet < -1:
+        #     print(bet, max_bet, curr_bet)
+        #     raise (ValueError, 'Cant bet negative')
 
         return action, bet
 
 
+class RandomBet:
+    @staticmethod
+    def action(self_risk, table_risk, curr_money, max_bet, remaining_players_hand, curr_pot,
+               remaining_players_tournament, hand_lowest_money, curr_bet, big_blind, single_max_raise, new_vips_list):
+        action = np.random.choice(['fold', 'call', 'raise'], 1)[0]
+        if action == 'raise':
+            bet = max_bet - curr_bet + np.random.randint(1, 100) * big_blind
 
-# action_clf = RandomForestClassifier()
-# bet_clf = RandomForestRegressor()
-# train = pd.read_csv('C:/Users/dysont/Documents/Graduate/rl/PokerBot/tournament_data.csv').sample(1000000)
-# train['action'] = 0
-# train.loc[train.bet == 0, 'action'] = 1
-# train.loc[train.bet == train.max_bet - train.curr_bet, 'action'] = 1
-# train.loc[train.bet + train.curr_bet > train.max_bet, 'action'] = 2
-# bet_train = train[train.action == 2]
-#
-#
-# X = train.drop(['Unnamed: 0', 'bet', 'player', 'action', 'single_max_raise'], axis=1)
-# y = train['action']
-# bet_X = bet_train.drop(['Unnamed: 0', 'bet', 'player', 'action', 'single_max_raise'], axis=1)
-# bet_y = bet_train['bet']
-# action_clf.fit(X, y)
-# bet_clf.fit(bet_X, bet_y)
+        elif action == 'call':
+            bet = max_bet - curr_bet
+        else:
+            bet = 0
+        return action, bet
 
 
 class SimpleModelBet:
@@ -81,15 +78,23 @@ class SimpleModelBet:
         #         pickle.dump(self.clf, fid)
 
     def action(self, self_risk, table_risk, curr_money, max_bet, remaining_players_hand, curr_pot,
-               remaining_players_tournament, hand_lowest_money, curr_bet, big_blind, single_max_raise):
+               remaining_players_tournament, hand_lowest_money, curr_bet, big_blind, single_max_raise, new_vips_list):
 
         predict_array = pd.DataFrame({'curr_bet': curr_bet, 'curr_money': curr_money, 'curr_pot': curr_pot,
                                       'hand_lowest_money': hand_lowest_money, 'max_bet': max_bet,
                                       'remaining_players_hand': remaining_players_hand,
                                       'remaining_players_tournament': remaining_players_tournament,
                                       'self_risk': self_risk,
-                                      'table_risk': table_risk}, index=[0])
-
+                                      # 'single_max_raise': single_max_raise,
+                                      'table_risk': table_risk,
+                                      'vips_1': new_vips_list[0],
+                                      'vips_2': new_vips_list[1],
+                                      'vips_3': new_vips_list[2],
+                                      'vips_4': new_vips_list[3],
+                                      'vips_5': new_vips_list[4],
+                                      }, index=[0])
+        # print(self_risk, table_risk, curr_money, max_bet, remaining_players_hand, curr_pot,
+        #        remaining_players_tournament, hand_lowest_money, curr_bet, big_blind, single_max_raise)
 
 
 
@@ -109,5 +114,66 @@ class SimpleModelBet:
         return act_action, bet
 
 
+class SimpleNNBet:
+    def __init__(self, number):
+        # with tf.Session() as self.sess:
+        self.sess = tf.Session()
+        saver = tf.train.import_meta_graph(
+            'C:/Users/dysont/Documents/Graduate/rl/PokerBot/runs/1531252322/checkpoints/model.ckpt-{}.meta'.format(
+                number))
+        saver.restore(self.sess,
+                      'C:/Users/dysont/Documents/Graduate/rl/PokerBot/runs/1531252322/checkpoints/model.ckpt-{}'.format(
+                          number))
+        graph = tf.get_default_graph()
+        self.predictions = graph.get_operation_by_name("predictions").outputs[0]
+        self.input_x = graph.get_operation_by_name("input_x").outputs[0]
+        self.keep_prob = graph.get_operation_by_name("keep_prob").outputs[0]
+        # correct_prediction = tf.equal(tf.argmax(self.predictions, 1), tf.argmax(y, 1))
+        # accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
+
+    def action(self, self_risk, table_risk, curr_money, max_bet, remaining_players_hand, curr_pot,
+               remaining_players_tournament, hand_lowest_money, curr_bet, big_blind, single_max_raise, new_vips_list):
+        predict_array = pd.DataFrame({'curr_bet': curr_bet,
+                                      'curr_money': curr_money,
+                                      'curr_pot': curr_pot,
+                                      # 'hand_lowest_money': hand_lowest_money,
+                                      # 'max_bet': max_bet,
+                                      'remaining_players_tournament': remaining_players_tournament,
+                                      'net_risk': self_risk - table_risk,
+                                      # 'self_risk': self_risk,
+                                      # 'single_max_raise': single_max_raise,
+                                      # 'table_risk': table_risk,
+                                      'vips_1': new_vips_list[0],
+                                      'vips_2': new_vips_list[1],
+                                      'vips_3': new_vips_list[2],
+                                      'vips_4': new_vips_list[3],
+                                      'vips_5': new_vips_list[4],
+                                      }, index=[0]).values
+
+        action = self.sess.run([self.predictions], feed_dict={
+            self.input_x: predict_array,
+            self.keep_prob: 1
+        })[0][0]
+
+        if action == 0:
+            act_action = 'fold'
+            bet = 0
+        elif action == 1:
+            act_action = 'call'
+            bet = max_bet - curr_bet
+
+        else:
+            act_action = 'raise'
+            bet = (action - 1) * max_bet
+
+        # print(act_action, bet)
+        return act_action, bet
+
+class NNRLBet:
+
+
+
 if __name__ == '__main__':
-    pkr = SimpleModelBet()
+    lol = 'lol'
+    pkr = RandomBet
+    print(pkr.action(0.239442342295, 0.256214334935, 1000, 36.0, 5, 39.0, 5, 1000, 0, 2, 2,  [0, 0, 0, 0, 0]))

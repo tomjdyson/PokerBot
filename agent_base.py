@@ -2,6 +2,9 @@ import numpy as np
 from collections import Counter
 from PokerBot.poker_player import PokerPlayer
 from random import shuffle, randint
+import pandas as pd
+import time
+from scipy import sparse
 
 
 class PokerAgentBase:
@@ -32,11 +35,16 @@ class PokerAgentBase:
         self.game_state = None
         self.pair_dict = {0: 9, 1: 8, 2: 7, 3: 7}
         self.kind_dict = {1: 9, 2: 9, 3: 6, 4: 2}
+        self.times = {'player_action': 0, 'initialize': 0, 'side_pool': 0, 'handle_money': 0, 'all_players_bet': 0,
+                      'decide_action': 0, 'full_time': 0}
+        self.stat_dict = {'final_state': pd.read_csv('final_state_df.csv').values,
+                          'opening_state': pd.read_csv('opening_state_df.csv').values,
+                          'flop_state': pd.read_csv('flop_state_df.csv').values,
+                          'turn_state': pd.read_csv('turn_state_df.csv').values}
         self.counts = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0, 11: 0, 12: 0, 13: 0}
 
     @staticmethod
     def create_cards():
-        # change for aces
         numbers = list(range(1, 14))
         suits = ['c', 'h', 's', 'd']
         cards = [(i, j) for i in numbers for j in suits]
@@ -92,24 +100,32 @@ class PokerAgentBase:
 
         return [high_card], [two_pair, four_kind], hand_rank
 
-    @staticmethod
-    def count_flush(state):
-        c = Counter([i[1] for i in state])
+    def count_flush(self, state):
         high_card = 0
         hand_rank = 10
-        if max(c.values()) >= 5:
-            hand_rank = 4
-            for i in c:
-                if c[i] >= 5:
-                    high_card = max([j[0] for j in state if j[1] == i])
-                    break
-        return [high_card], [min(max(c.values()), 5)], hand_rank
+        state_count = {'c': 0, 'h': 0, 'd': 0, 's': 0}
+        flush_state = 'c'
+        for i in state:
+            state_count[i[1]] += 1
+            if state_count[i[1]] == 5:
+                high_card = max([j[0] for j in state if j[1] == i[1]])
+                hand_rank = 4
+                flush_state = i
 
-    @staticmethod
-    def cards_in_row(state):
+        return [high_card], [min(max(state_count.values()), 5)], hand_rank, flush_state
+
+    # @staticmethod
+    def cards_in_row(self, cards, suit=False):
+        if suit:
+            state = [j[0] for j in cards if j[1] == suit]
+        else:
+            state = [j[0] for j in cards]
+        state.sort()
+
         straight_val = 1
         straight_max = 1
         high_card = 0
+        hand_rank = 10
         for i in range(len(state) - 1):
             curr_value = state[i]
             j = i + 1
@@ -118,38 +134,32 @@ class PokerAgentBase:
                 continue
             elif next_value == curr_value + 1:
                 straight_val += 1
-                high_card = next_value
             else:
                 straight_val = 1
             straight_max = max([straight_val, straight_max])
-        return straight_max, high_card
-
-    def count_straight(self, state):
-        sorted_hand = [i[0] for i in state]
-        sorted_hand.sort()
-        c = Counter([i[1] for i in state])
-        for i in c:
-            if c[i] >= 5:
-                straight_flush = [j[0] for j in state if j[1] == i]
-                straight_flush.sort()
-                straight_max, high_card = self.cards_in_row(straight_flush)
-                if straight_max >= 5:
-                    straight_max = 6
-                    return [high_card], [straight_max], 1
-
-        hand_rank = 10
-        straight_max, high_card = self.cards_in_row(sorted_hand)
-        if straight_max >= 5:
-            hand_rank = 5
-            straight_max = 5
+            if straight_max == 5:
+                high_card = next_value
+                hand_rank = 5
+                break
 
         return [high_card], [straight_max], hand_rank
 
     def find_state(self, cards):
+
         pair_high, pairs, pair_rank = self.count_pairs_new(cards)
-        straight_high, straight, straight_rank = self.count_straight(cards)
-        flush_high, flush, flush_rank = self.count_flush(cards)
+        flush_high, flush, flush_rank, flush_suit = self.count_flush(cards)
+        # straight_high, straight, straight_rank = self.cards_in_row(cards)
+        if flush[0] == 5:
+            straight_high, straight, straight_rank = self.cards_in_row(cards, flush_suit)
+            if straight[0] < 5:
+                straight_high, straight, straight_rank = self.cards_in_row(cards)
+            else:
+                straight_rank = 1
+        else:
+            straight_high, straight, straight_rank = self.cards_in_row(cards)
+
         best_hand = min(pair_rank, straight_rank, flush_rank)
+
         if best_hand == pair_rank:
             return pair_high + pairs + straight + flush, pair_rank
         elif best_hand == straight_rank:
@@ -158,6 +168,7 @@ class PokerAgentBase:
             return flush_high + pairs + straight + flush, flush_rank
 
     def find_best(self):
+
         top_rank = min([i.curr_rank for i in self.player_list])
         if Counter([i.curr_rank for i in self.player_list])[top_rank] > 1:
             drawn_rank = [i for i in self.player_list if i.curr_rank == top_rank]
@@ -171,6 +182,7 @@ class PokerAgentBase:
             return 'win', [i for i in self.player_list if i.curr_rank == top_rank]
 
     def fill_in_state(self, game_round):
+
         self.game_state = game_round
         for i in self.player_list:
             if game_round == 'opening_state':
@@ -207,15 +219,15 @@ class PokerAgentBase:
 
 if __name__ == '__main__':
     pkr = PokerAgentBase(5)
-    import time
+    print(pkr.times)
 
-    apair_dict = {0: 9, 1: 8, 2: 7}
-    akind_dict = {1: 9, 2: 9, 3: 6, 4: 2}
-    acounts = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0, 11: 0, 12: 0, 13: 0}
-
-    # start_time = time.time()
-    # for i in range(1000000):
-    print(pkr.count_pairs_new([(13, 'c'), (13, 'c'), (13, 'd'), (13, 'd'), (9, 'c')]))
+    # apair_dict = {0: 9, 1: 8, 2: 7}
+    # akind_dict = {1: 9, 2: 9, 3: 6, 4: 2}
+    # acounts = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0, 11: 0, 12: 0, 13: 0}
+    #
+    # # start_time = time.time()
+    # # for i in range(1000000):
+    # print(pkr.count_pairs_new([(13, 'c'), (13, 'c'), (13, 'd'), (13, 'd'), (9, 'c')]))
     # print("--- %s seconds ---" % (time.time() - start_time))
     # print((time.time() - start_time) / 10000)
 

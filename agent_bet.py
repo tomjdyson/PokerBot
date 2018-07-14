@@ -13,15 +13,26 @@ from PokerBot.bet_model import RFModel
 
 class PokerAgent(PokerAgentBase):
     def player_actions(self):
+        start_time = time.time()
+
         remove_list = []
+
+        hand_lowest_money = min([player.start_money for player in self.player_list])
+        vips_list = [(player.non_blind_play / player.non_blind) for player in self.player_list]
+
         for player in self.player_list:
+            player_start_time = time.time()
             action, bet = player.decide_action(game_state=self.game_state, big_blind=self.big_blind,
                                                curr_table=self.curr_pot, curr_max_bet=self.curr_max_bet,
                                                remaining_player_hands=len(self.player_list),
                                                remaining_players_tournament=len(self.starting_player_list),
-                                               hand_lowest_money=min(
-                                                   [player.start_money for player in self.player_list]),
-                                               single_max_raise=self.single_max_raise)
+                                               hand_lowest_money=hand_lowest_money,
+                                               single_max_raise=self.single_max_raise,
+                                               vips_list=vips_list,
+                                               stat_dict=self.stat_dict
+                                               )
+            self.times['decide_action'] += (time.time() - player_start_time)
+
             if player.curr_money < 0:
                 raise (ValueError, 'more than money')
             # print('name', player.name, 'curr_money', player.curr_money, 'start_money', player.start_money, 'action',
@@ -40,8 +51,11 @@ class PokerAgent(PokerAgentBase):
             if player.curr_bet > player.start_money:
                 raise (ValueError, 'more than money')
         [self.player_list.remove(player) for player in remove_list]
+        self.times['player_action'] += (time.time() - start_time)
 
     def all_players_bet(self):
+        start_time = time.time()
+
         unequal = False
         for player in self.player_list:
             if player.curr_bet == self.curr_max_bet:
@@ -53,9 +67,12 @@ class PokerAgent(PokerAgentBase):
             else:
                 unequal = True
                 break
+        self.times['all_players_bet'] += (time.time() - start_time)
         return unequal
 
     def initialize_game(self):
+        start_time = time.time()
+
         for player in self.starting_player_list:
             if player.curr_money < 0:
                 raise (ValueError, 'in debt')
@@ -73,9 +90,9 @@ class PokerAgent(PokerAgentBase):
             self.dealer += 1
         if len(self.player_list) > 2:
             big_blind_pos = self.dealer - (len(self.player_list) - 2) if self.dealer >= (
-            len(self.player_list) - 2) else self.dealer + 2
+                len(self.player_list) - 2) else self.dealer + 2
             small_blind_pos = self.dealer - (len(self.player_list) - 1) if self.dealer >= (
-            len(self.player_list) - 1) else self.dealer + 1
+                len(self.player_list) - 1) else self.dealer + 1
             self.player_list = self.starting_player_list[big_blind_pos + 1:] + self.starting_player_list[
                                                                                :big_blind_pos + 1]
 
@@ -97,6 +114,8 @@ class PokerAgent(PokerAgentBase):
             small_blind_pos].start_money)
 
         self.curr_max_bet = max(player.curr_bet for player in self.starting_player_list)
+        self.times['initialize'] += (time.time() - start_time)
+
         # if len(self.starting_player_list) == 2:
         #     print({player.name:[player.curr_bet, player.curr_money] for player in self.starting_player_list})
 
@@ -104,6 +123,8 @@ class PokerAgent(PokerAgentBase):
         # print('Dealer Location:',[player.name for player in self.player_list], big_blind_pos, small_blind_pos)
 
     def run_betting(self):
+        start_time = time.time()
+
         if len(self.player_list) > 1:
             unequal = True
             while unequal:
@@ -111,6 +132,8 @@ class PokerAgent(PokerAgentBase):
                 unequal = self.all_players_bet()
 
     def side_pool(self):
+        start_time = time.time()
+
         player_bets = [player.curr_bet for player in self.player_list]
         max_bet = max(player_bets)
         m_l = [i for i, j in enumerate(player_bets) if j == max_bet]
@@ -123,35 +146,38 @@ class PokerAgent(PokerAgentBase):
             self.player_list[m_l[0]].curr_money += (max_bet - sec_bet)
             self.curr_pot = self.curr_pot - (max_bet - sec_bet)
             self.player_list[m_l[0]].curr_bet = sec_bet
-            ###TODO Finish this off - too complicated for now
-            # curr_rank = 0
-            # while self.curr_pot > 0:
-            #     rank = ranks_sort[curr_rank]
-            #     print(rank)
-            #     print(self.curr_pot)
-            #     rank_pos = [i for i, j in enumerate(ranks) if j == rank]
-            #     if len(rank_pos) == 1:
-            #         curr_winner = self.player_list[rank_pos[0]]
-            #         pot_money = len(self.player_list) * curr_winner.curr_bet
-            #         if pot_money > self.curr_pot:
-            #             pot_money = self.curr_pot
-            #         print(pot_money, curr_winner.curr_bet)
-            #         curr_winner.curr_money += pot_money
-            #         self.curr_pot -= pot_money
-            #     else:
-            #         # print(rank_pos)
-            #         for i in rank_pos:
-            #             # print(i, self.player_list)
-            #             curr_winner = self.player_list[i]
-            #             winner_money = len(self.player_list) * curr_winner.curr_bet
-            #             if winner_money > self.curr_pot:
-            #                 winner_money = self.curr_pot
-            #             print(winner_money)
-            #             curr_winner.curr_money += winner_money / len(rank_pos)
-            #             self.curr_pot -= winner_money / len(rank_pos)
-            #     curr_rank += 1
+        self.times['side_pool'] += (time.time() - start_time)
+
+        ###TODO Finish this off - too complicated for now
+        # curr_rank = 0
+        # while self.curr_pot > 0:
+        #     rank = ranks_sort[curr_rank]
+        #     print(rank)
+        #     print(self.curr_pot)
+        #     rank_pos = [i for i, j in enumerate(ranks) if j == rank]
+        #     if len(rank_pos) == 1:
+        #         curr_winner = self.player_list[rank_pos[0]]
+        #         pot_money = len(self.player_list) * curr_winner.curr_bet
+        #         if pot_money > self.curr_pot:
+        #             pot_money = self.curr_pot
+        #         print(pot_money, curr_winner.curr_bet)
+        #         curr_winner.curr_money += pot_money
+        #         self.curr_pot -= pot_money
+        #     else:
+        #         # print(rank_pos)
+        #         for i in rank_pos:
+        #             # print(i, self.player_list)
+        #             curr_winner = self.player_list[i]
+        #             winner_money = len(self.player_list) * curr_winner.curr_bet
+        #             if winner_money > self.curr_pot:
+        #                 winner_money = self.curr_pot
+        #             print(winner_money)
+        #             curr_winner.curr_money += winner_money / len(rank_pos)
+        #             self.curr_pot -= winner_money / len(rank_pos)
+        #     curr_rank += 1
 
     def handle_money(self, result, player_list):
+        start_time = time.time()
 
         all_bets = [player.curr_bet for player in self.player_list]
         if len(set(all_bets)) != 1:
@@ -163,8 +189,10 @@ class PokerAgent(PokerAgentBase):
                 player.curr_money += money_amount
         else:
             player_list[0].curr_money += self.curr_pot
+        self.times['handle_money'] += (time.time() - start_time)
 
     def run_game(self):
+        start_time = time.time()
         self.initialize_game()
         self.remaining_cards = self.create_cards()
         for i in self.player_list:
@@ -188,6 +216,7 @@ class PokerAgent(PokerAgentBase):
         self.run_betting()
         result, player_list = self.find_best()
         self.handle_money(result, player_list)
+        self.times['full_time'] += (time.time() - start_time)
         return result, player_list
 
     def run_tournament(self):
@@ -210,23 +239,23 @@ class PokerAgent(PokerAgentBase):
         # print(self.starting_player_list[0].curr_money, self.starting_player_list[0].name,
         #       self.starting_player_list[0].tournament_hands)
         # print(self.starting_player_list[0].name)
+
         return self.starting_player_list
 
 
 def simulate_tournaments(n):
     simulate = []
     winners = []
-    rf_clf = RFModel('C:/Users/dysont/Documents/Graduate/rl/PokerBot/tournament_data_4.csv', 1000000)
-    action_clf = rf_clf.action_model()
-    bet_clf = rf_clf.bet_model()
-    # action_clf = None
-    # bet_clf = None
+    # rf_clf = RFModel('C:/Users/dysont/Documents/Graduate/rl/PokerBot/tournament_data_vips.csv', )
+    # action_clf = rf_clf.action_model()
+    # bet_clf = rf_clf.bet_model()
+    action_clf = None
+    bet_clf = None
     for i in range(n):
         pkr = PokerAgent(5, action_clf=action_clf, bet_clf=bet_clf)
         winner = pkr.run_tournament()[0]
         simulate.append(winner.tournament_hands)
         winners.append(winner.name)
-        # print(i)
     # TODO Better way for this
     flat_list = [item for sublist in simulate for item in sublist]
     df = pd.DataFrame(flat_list)
@@ -238,14 +267,15 @@ def simulate_tournaments(n):
 if __name__ == '__main__':
     from multiprocessing import Pool
     import time
+
     # game_obj = PokerAgent(5)
     # print(game_obj.run_tournament())
-    for i in range(5):
+    # for i in range(3):
     # start_time = time.time()
     # simulate_tournaments(100)
     # print("--- %s seconds ---" % (time.time() - start_time))
     # print((time.time() - start_time) / 100)
-        simulate_tournaments(3000).to_csv('tournament_data_4.csv')
+    simulate_tournaments(100).to_csv('tournament_nn.csv')
 
     # with Pool(3) as p:
     #     a, b, c = p.map(simulate_tournaments, [500, 500, 500])

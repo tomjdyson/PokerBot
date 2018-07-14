@@ -40,4 +40,7 @@ class PokerAgentStats(PokerAgentBase):
 
 if __name__ == '__main__':
     pkr = PokerAgentStats(5)
-    a = pkr.run_multiple(1000000)
+    import time
+
+    a = pkr.run_multiple(2000000)
+
