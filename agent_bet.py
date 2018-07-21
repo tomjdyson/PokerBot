@@ -3,6 +3,7 @@ import pandas as pd
 from PokerBot.agent_base import PokerAgentBase
 from collections import Counter
 from PokerBot.bet_model import RFModel
+import time
 
 
 # TODO Check out of list error - fixed with try for now but need to simulate again probably 10m
@@ -11,7 +12,7 @@ from PokerBot.bet_model import RFModel
 # TODO Change single max bet to single max raise and make it work
 # TODO shuffle starting list on initialize
 
-class PokerAgent(PokerAgentBase):
+class PokerAgentBet(PokerAgentBase):
     def player_actions(self):
         start_time = time.time()
 
@@ -102,10 +103,7 @@ class PokerAgent(PokerAgentBase):
             big_blind_pos = (self.dealer + 1) % 2
             # TODO This might not work - need to look at heads up rules who starts betting
             self.player_list = [self.starting_player_list[small_blind_pos]] + [self.starting_player_list[big_blind_pos]]
-            print('small_blind', self.starting_player_list[small_blind_pos].name,
-                  self.starting_player_list[small_blind_pos].curr_money)
-            print('big_blind', self.starting_player_list[big_blind_pos].name,
-                  self.starting_player_list[big_blind_pos].curr_money)
+
             # print('Starting location:' , [player.name for player in self.starting_player_list])
             # print('Dealer Location:',[player.name for player in self.player_list], big_blind_pos, small_blind_pos)
 
@@ -236,44 +234,6 @@ class PokerAgent(PokerAgentBase):
             hand_counter += 1
         return self.starting_player_list
 
-    def rl_reward(self, player, min, max):
-        new_min_pos = player.curr_money - min
-        new_max_pos = max - player.curr_money
-
-        if new_min_pos >= player.min_pos:
-            player.train()
-
-        elif new_max_pos <= player.max_pos:
-            player.train()
-
-        player.min_pos = new_min_pos
-        player.max_pos = new_max_pos
-
-    def run_tournament_rl(self):
-        hand_counter = 1
-        while len(self.starting_player_list) > 1:
-            # print(hand/_counter)
-            self.run_game()
-            curr_min = min([player.curr_money for player in self.starting_player_list])
-            curr_max = min([player.curr_money for player in self.starting_player_list])
-            for player in self.starting_player_list:
-                # print(player.name, player.curr_money, player.curr_bet, self.curr_pot)
-                self.rl_reward(player, max=curr_max, min=curr_min)
-                if player.curr_money == 0:
-                    self.starting_player_list.remove(player)
-                if player.curr_money < 0:
-                    ValueError('Cant be in debt')
-            if hand_counter % 50 == 0:
-                self.big_blind *= 2
-                self.small_blind *= 2
-            hand_counter += 1
-        # print('finished')
-        # print(self.starting_player_list[0].curr_money, self.starting_player_list[0].name,
-        #       self.starting_player_list[0].tournament_hands)
-        # print(self.starting_player_list[0].name)
-
-        return self.starting_player_list
-
 
 def simulate_tournaments(n):
     simulate = []
@@ -284,7 +244,7 @@ def simulate_tournaments(n):
     action_clf = None
     bet_clf = None
     for i in range(n):
-        pkr = PokerAgent(5, action_clf=action_clf, bet_clf=bet_clf)
+        pkr = PokerAgentBet(5, action_clf=action_clf, bet_clf=bet_clf)
         winner = pkr.run_tournament()[0]
         simulate.append(winner.tournament_hands)
         winners.append(winner.name)
@@ -300,7 +260,7 @@ if __name__ == '__main__':
     from multiprocessing import Pool
     import time
 
-    game_obj = PokerAgent(5)
+    game_obj = PokerAgentBet(5)
     print(game_obj.run_tournament_rl()[0].name)
     # for i in range(3):
     # start_time = time.time()

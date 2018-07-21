@@ -228,7 +228,6 @@ class NNRLBet:
         self.optimizer = tf.train.AdamOptimizer(learning_rate=0.0001).minimize(self.cost)
 
     def prep_data(self, data):
-        print(data)
         data['net_risk'] = data['self_risk'] - data['table_risk']
         data['action'] = 0
         data.loc[data.bet == 0, 'action'] = 1
@@ -246,30 +245,37 @@ class NNRLBet:
         data['0'] = 0
         data['1'] = 0
         data['2'] = 0
-        data.loc[data.action == 0,'0'] = 1
-        data.loc[data.action == 1,'1'] = 1
-        data.loc[data.action == 2,'2'] = 1
+        data.loc[data.action == 0, '0'] = 1
+        data.loc[data.action == 1, '1'] = 1
+        data.loc[data.action == 2, '2'] = 1
         train_y = data[['0', '1', '2']].values
         return train_x, train_y
 
     def action(self, self_risk, table_risk, curr_money, max_bet, remaining_players_hand, curr_pot,
                remaining_players_tournament, hand_lowest_money, curr_bet, big_blind, single_max_raise, new_vips_list):
-        predict_array = pd.DataFrame({'curr_bet': curr_bet,
-                                      'curr_money': curr_money,
-                                      'curr_pot': curr_pot,
-                                      # 'hand_lowest_money': hand_lowest_money,
-                                      # 'max_bet': max_bet,
-                                      'remaining_players_tournament': remaining_players_tournament,
-                                      'net_risk': self_risk - table_risk,
-                                      # 'self_risk': self_risk,
-                                      # 'single_max_raise': single_max_raise,
-                                      # 'table_risk': table_risk,
-                                      'vips_1': new_vips_list[0],
-                                      'vips_2': new_vips_list[1],
-                                      'vips_3': new_vips_list[2],
-                                      'vips_4': new_vips_list[3],
-                                      'vips_5': new_vips_list[4],
-                                      }, index=[0]).values
+        try:
+            predict_array = pd.DataFrame({'curr_bet': curr_bet,
+                                          'curr_money': curr_money,
+                                          'curr_pot': curr_pot,
+                                          # 'hand_lowest_money': hand_lowest_money,
+                                          # 'max_bet': max_bet,
+                                          'remaining_players_tournament': remaining_players_tournament,
+                                          'net_risk': self_risk - table_risk,
+                                          # 'self_risk': self_risk,
+                                          # 'single_max_raise': single_max_raise,
+                                          # 'table_risk': table_risk,
+                                          'vips_1': new_vips_list[0],
+                                          'vips_2': new_vips_list[1],
+                                          'vips_3': new_vips_list[2],
+                                          'vips_4': new_vips_list[3],
+                                          'vips_5': new_vips_list[4],
+                                          }, index=[0]).values
+        except Exception as e:
+            print(curr_bet, curr_money, curr_pot)
+            raise e
+
+        # if curr_bet > 1000:
+        #     print(curr_bet)
 
         action = self.sess.run([self.predicter], feed_dict={
             self.x: predict_array,
@@ -285,9 +291,10 @@ class NNRLBet:
 
         else:
             act_action = 'raise'
-            bet = np.random.randint(2, 10) * big_blind
+            bet = (max_bet - curr_bet) + np.random.randint(2, 10) * big_blind
 
         # print(act_action, bet)
+        # TODO Set prob to choose random
         return act_action, bet
 
     def train(self, x):

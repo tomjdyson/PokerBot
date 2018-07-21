@@ -1,7 +1,7 @@
 import numpy as np
-from PokerBot.player_bet import SimpleBet, SimpleModelBet, SimpleNNBet, NNRLBet
+from PokerBot.player_bet import SimpleBet, SimpleModelBet, SimpleNNBet, NNRLBet, RandomBet
 import pandas as pd
-
+import random
 
 class PokerPlayer:
     def __init__(self, name, bet_style='model', bet_obj = NNRLBet(10), action_clf=None, bet_clf=None):
@@ -20,6 +20,8 @@ class PokerPlayer:
                             'turn_state': None}
         self.non_blind = 1
         self.non_blind_play = 0
+
+        #TODO Set this so can be percentage either sidee
         self.min_pos = 0
         self.max_pos = 0
 
@@ -65,7 +67,9 @@ class PokerPlayer:
         for i in range(len(vips_list)):
             new_vips_list[i] = vips_list[i]
 
-        self.previous_action, self.bet = self.betting_obj.action(self_risk=risk, big_blind=big_blind,
+        if random.randint(0, 100) > 10:
+
+            self.previous_action, self.bet = self.betting_obj.action(self_risk=risk, big_blind=big_blind,
                                                                  max_bet=curr_max_bet,
                                                                  curr_pot=curr_table, curr_bet=self.curr_bet,
                                                                  table_risk=self.table_risk(game_state, stat_dict),
@@ -75,6 +79,18 @@ class PokerPlayer:
                                                                  hand_lowest_money=hand_lowest_money,
                                                                  single_max_raise=single_max_raise,
                                                                  new_vips_list=new_vips_list)
+        else:
+            self.previous_action, self.bet = RandomBet.action(self_risk=risk, big_blind=big_blind,
+                                                                     max_bet=curr_max_bet,
+                                                                     curr_pot=curr_table, curr_bet=self.curr_bet,
+                                                                     table_risk=self.table_risk(game_state, stat_dict),
+                                                                     curr_money=self.curr_money,
+                                                                     remaining_players_hand=remaining_player_hands,
+                                                                     remaining_players_tournament=remaining_players_tournament,
+                                                                     hand_lowest_money=hand_lowest_money,
+                                                                     single_max_raise=single_max_raise,
+                                                                     new_vips_list=new_vips_list)
+
 
         if self.curr_bet == 0:
             self.non_blind += 1
