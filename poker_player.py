@@ -3,13 +3,13 @@ from PokerBot.player_bet import SimpleBet, SimpleModelBet, SimpleNNBet, NNRLBet,
 import pandas as pd
 import random
 
+
 class PokerPlayer:
-    def __init__(self, name, bet_style='model', bet_obj = NNRLBet(10), action_clf=None, bet_clf=None):
-        # self.name = np.random.choice(
-        #     ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't'], 1)
+    def __init__(self, name, bet_style='model', bet_obj=None, action_clf=None, bet_clf=None, keep_rate=0.3):
         self.name = name
         self.curr_hand = None
         self.start_money = 1000
+        self.keep_rate = keep_rate
         self.curr_money = self.start_money
         self.curr_bet = 0
         self.curr_state = None
@@ -21,12 +21,19 @@ class PokerPlayer:
         self.non_blind = 1
         self.non_blind_play = 0
 
-        #TODO Set this so can be percentage either sidee
         self.min_pos = 0
         self.max_pos = 0
+        self.curr_pos = 0
+        self.curr_reward = 0
+        self.reward_list = []
+        self.random_game = False
 
         self.tournament_hands = []
         self.game_hands = []
+        self.game_hands_list = []
+        self.action_list = []
+        self.bet_list = []
+        self.state_list = []
 
         if bet_style == 'simple':
 
@@ -35,9 +42,6 @@ class PokerPlayer:
 
         else:
             self.betting_obj = bet_obj
-            # self.betting_obj = SimpleBet(-1000, -500,
-            #                              4)
-            # call_risk AND raise_risk
 
     def table_risk(self, game_state, stat_dict):
         state_df = stat_dict[game_state]
@@ -67,20 +71,9 @@ class PokerPlayer:
         for i in range(len(vips_list)):
             new_vips_list[i] = vips_list[i]
 
-        if random.randint(0, 100) > 10:
+        if not self.random_game:
 
             self.previous_action, self.bet = self.betting_obj.action(self_risk=risk, big_blind=big_blind,
-                                                                 max_bet=curr_max_bet,
-                                                                 curr_pot=curr_table, curr_bet=self.curr_bet,
-                                                                 table_risk=self.table_risk(game_state, stat_dict),
-                                                                 curr_money=self.curr_money,
-                                                                 remaining_players_hand=remaining_player_hands,
-                                                                 remaining_players_tournament=remaining_players_tournament,
-                                                                 hand_lowest_money=hand_lowest_money,
-                                                                 single_max_raise=single_max_raise,
-                                                                 new_vips_list=new_vips_list)
-        else:
-            self.previous_action, self.bet = RandomBet.action(self_risk=risk, big_blind=big_blind,
                                                                      max_bet=curr_max_bet,
                                                                      curr_pot=curr_table, curr_bet=self.curr_bet,
                                                                      table_risk=self.table_risk(game_state, stat_dict),
@@ -90,7 +83,17 @@ class PokerPlayer:
                                                                      hand_lowest_money=hand_lowest_money,
                                                                      single_max_raise=single_max_raise,
                                                                      new_vips_list=new_vips_list)
-
+        else:
+            self.previous_action, self.bet = RandomBet.action(self_risk=risk, big_blind=big_blind,
+                                                              max_bet=curr_max_bet,
+                                                              curr_pot=curr_table, curr_bet=self.curr_bet,
+                                                              table_risk=self.table_risk(game_state, stat_dict),
+                                                              curr_money=self.curr_money,
+                                                              remaining_players_hand=remaining_player_hands,
+                                                              remaining_players_tournament=remaining_players_tournament,
+                                                              hand_lowest_money=hand_lowest_money,
+                                                              single_max_raise=single_max_raise,
+                                                              new_vips_list=new_vips_list)
 
         if self.curr_bet == 0:
             self.non_blind += 1
@@ -126,11 +129,136 @@ class PokerPlayer:
         # print(hand_stat)
         self.tournament_hands.append(hand_stat)
         self.game_hands.append(hand_stat)
+        self.action_list.append(self.previous_action)
+        self.bet_list.append(-1 if self.previous_action == 'fold' else self.bet)
+        self.state_list.append(game_state)
+        return self.previous_action, self.bet
+
+    def train(self):
+        self.betting_obj.train(pd.DataFrame(self.game_hands), self.curr_reward)
+
+    def batch_train(self):
+        train_hands = pd.concat(self.game_hands_list, axis=0)
+        train_hands = train_hands.sample(frac=self.keep_rate)
+        self.betting_obj.train(train_hands.drop('reward', axis=1), train_hands.reward)
+
+
+class QPokerPlayer:
+    def __init__(self, name, history_length, betting_obj):
+        self.name = name
+        self.curr_hand = None
+        self.start_money = 1000
+        self.curr_money = self.start_money
+        self.curr_bet = 0
+        self.curr_rank = None
+        self.curr_state = []
+        self.previous_action = None
+        self.bet = 0
+        # todo make these into one tuple
+        self.action_history = []
+        self.reward_history = []
+        self.lose_reward_history = []
+        self.win_reward_history = []
+        self.simple_action_history = []
+        self.action_list = []
+        self.bet_list = []
+        self.state_list = []
+        self.epsilon = 0.1
+        self.history_length = history_length
+        self.personal_history = [-2 for i in range(history_length)]
+        self.betting_obj = betting_obj
+        self.pot_minus_1 = 0
+        self.pot_minus_2 = 0
+        self.action_value_list = []
+
+    def add_blind(self, blind_value):
+        self.curr_bet = min(blind_value, self.start_money)
+        self.curr_money -= min(blind_value, self.start_money)
+        self.reward_history.append(self.curr_bet)
+        self.lose_reward_history.append(-self.curr_bet)
+        self.action_history.append(self.curr_bet)
+        # TODO Need to see if this is correct - is only necessary when folding
+        # self.simple_action_history.append(1)
+        self.update_personal()
+
+    def update_personal(self):
+        self.personal_history = self.action_history.copy()
+        self.personal_history = self.personal_history[:self.history_length]
+        self.personal_history += [-2] * (self.history_length - len(self.personal_history))
+
+    def decide_action(self, table_cards, opponent_history, current_max_bet, single_max_raise, current_pot,
+                      len_player_list):
+        # print(self.curr_state)
+        if self.previous_action is not None:
+            if self.previous_action == 'raise':
+                # self.win_reward_history.append(self.pot_minus_1 - self.pot_minus_2)
+                self.win_reward_history.append(
+                    (self.pot_minus_1 - self.pot_minus_2) + (self.prev_raise * len_player_list))
+            if self.previous_action == 'call':
+                self.win_reward_history.append(self.pot_minus_1 - self.pot_minus_2)
+
+        # todo need to decay epsilon
+        # if random.uniform(0, 1) > self.epsilon:
+        # print(self.curr_hand, table_cards)
+        action, action_values = self.betting_obj.action(self.curr_hand, table_cards,
+                                         self.personal_history, opponent_history, self.curr_state, self.curr_bet)
+        # else:
+        #     # TODO Move random into here
+        #     action = np.random.randint(0, 3)
+        self.simple_action_history.append(action)
+        if action == 0:
+            self.previous_action = 'fold'
+            self.bet = 0
+            if current_max_bet == self.curr_bet:
+                self.previous_action = 'call'
+        elif action == 1:
+            self.previous_action = 'call'
+            self.bet = current_max_bet - self.curr_bet
+        elif action == 2:
+            self.previous_action = 'raise'
+            # self.bet = (current_max_bet - self.curr_bet) + np.random.randint(1, 3) * single_max_raise
+            self.bet = (current_max_bet - self.curr_bet) + single_max_raise
+
+        if self.bet > self.curr_money:
+
+            self.bet = self.curr_money
+            self.curr_bet = self.start_money
+            self.previous_action = 'raise'
+            self.curr_money = 0
+
+        else:
+            self.curr_bet += self.bet
+            self.curr_money -= self.bet
+
+        if self.bet > 100000:
+            self.bet = self.curr_money
+            self.curr_money = 0
+            raise ValueError('Too large values')
+
+        # print(self.previous_action)
+
+        self.prev_raise = self.bet - current_max_bet
+        self.action_history.append(-1 if self.previous_action == 'fold' else self.bet)
+        self.update_personal()
+        # if self.previous_action != 'fold':
+        self.reward_history.append(self.bet)
+        # THis doesnt work perfectly but works for now
+        self.lose_reward_history.append(-self.bet)
+        self.action_list.append(self.previous_action)
+        self.bet_list.append(-1 if self.previous_action == 'fold' else self.bet)
+        self.state_list.append(self.curr_hand + table_cards)
+        self.action_value_list.append(action_values)
+        self.pot_minus_1 = current_pot
+        self.pot_minus_2 = self.pot_minus_1
+        # print(self.name, self.previous_action)
 
         return self.previous_action, self.bet
 
     def train(self):
-        self.betting_obj.train(pd.DataFrame(self.game_hands))
+        self.betting_obj.train(self.reward_history * -1)
+
+    def swap(self, dominant_player):
+        self.betting_obj.swap(dominant_player.betting_obj)
 
 
 if __name__ == '__main__':

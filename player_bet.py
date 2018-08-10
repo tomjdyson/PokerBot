@@ -3,6 +3,7 @@ from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 import pickle
 import pandas as pd
 import tensorflow as tf
+import math
 from PokerBot.bet_model import SimpleNN
 
 
@@ -46,7 +47,7 @@ class SimpleBet:
 
         return action, bet
 
-    def train(self, x):
+    def train(self, x, reward):
         raise ValueError('Cant be trained')
 
 
@@ -56,7 +57,7 @@ class RandomBet:
                remaining_players_tournament, hand_lowest_money, curr_bet, big_blind, single_max_raise, new_vips_list):
         action = np.random.choice(['fold', 'call', 'raise'], 1)[0]
         if action == 'raise':
-            bet = max_bet - curr_bet + np.random.randint(1, 100) * big_blind
+            bet = (max_bet - curr_bet) + np.random.randint(1, 3) * single_max_raise
 
         elif action == 'call':
             bet = max_bet - curr_bet
@@ -64,7 +65,7 @@ class RandomBet:
             bet = 0
         return action, bet
 
-    def train(self, x):
+    def train(self, x, reward):
         raise ValueError('Cant be trained')
 
 
@@ -121,7 +122,7 @@ class SimpleModelBet:
 
         return act_action, bet
 
-    def train(self, x):
+    def train(self, x, reward):
         raise ValueError('Cant be trained')
 
 
@@ -180,12 +181,75 @@ class SimpleNNBet:
         # print(act_action, bet)
         return act_action, bet
 
-    def train(self, x):
+    def train(self, x, reward):
+        raise ValueError('Cant be trained')
+
+
+class LoadRLNNBet:
+    def __init__(self, name):
+        # with tf.Session() as self.sess:
+        self.sess = tf.Session()
+        saver = tf.train.import_meta_graph(
+            'C:/Users/dysont/Documents/Graduate/rl/PokerBot/runs/{}/model.meta'.format(
+                name))
+        saver.restore(self.sess,
+                      'C:/Users/dysont/Documents/Graduate/rl/PokerBot/runs/{}/model'.format(
+                          name))
+        graph = tf.get_default_graph()
+        self.predictions = graph.get_operation_by_name("add").outputs[0]
+        self.input_x = graph.get_operation_by_name("input_x").outputs[0]
+        self.keep_prob = graph.get_operation_by_name("keep_prob").outputs[0]
+        # correct_prediction = tf.equal(tf.argmax(self.predictions, 1), tf.argmax(y, 1))
+        # accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
+
+    def action(self, self_risk, table_risk, curr_money, max_bet, remaining_players_hand, curr_pot,
+               remaining_players_tournament, hand_lowest_money, curr_bet, big_blind, single_max_raise, new_vips_list):
+        predict_array = pd.DataFrame({'curr_bet': [curr_bet] * 3,
+                                      'curr_money': [curr_money] * 3,
+                                      'curr_pot': [curr_pot] * 3,
+                                      # 'hand_lowest_money': hand_lowest_money,
+                                      # 'max_bet': max_bet,
+                                      'remaining_players_tournament': [remaining_players_tournament] * 3,
+                                      # 'net_risk': [self_risk - table_risk] * 3,
+                                      'self_risk': [self_risk] * 3,
+                                      # 'single_max_raise': single_max_raise,
+                                      'table_risk': [table_risk] * 3,
+                                      'vips_1': [new_vips_list[0]] * 3,
+                                      'vips_2': [new_vips_list[1]] * 3,
+                                      'vips_3': [new_vips_list[2]] * 3,
+                                      'vips_4': [new_vips_list[3]] * 3,
+                                      'vips_5': [new_vips_list[4]] * 3,
+                                      '0': [1, 0, 0],
+                                      '1': [0, 1, 0],
+                                      '2': [0, 0, 1]
+                                      }).values
+
+        rewards = self.sess.run([self.predictions], feed_dict={
+            self.input_x: predict_array,
+            self.keep_prob: 1
+        })[0]
+
+        action = rewards.argmax()
+
+        if action == 0:
+            act_action = 'fold'
+            bet = 0
+        elif action == 1:
+            act_action = 'call'
+            bet = max_bet - curr_bet
+
+        else:
+            act_action = 'raise'
+            bet = (max_bet - curr_bet) + np.random.randint(1, 5) * big_blind
+
+        return act_action, bet
+
+    def train(self, x, reward):
         raise ValueError('Cant be trained')
 
 
 class NNRLBet:
-    def __init__(self, input_len):
+    def __init__(self, input_len, name):
         self.sess = tf.Session()
         graph = tf.get_default_graph()
         self.input_len = input_len
@@ -193,20 +257,22 @@ class NNRLBet:
         self.optimizer_cost()
         self.sess.run(tf.global_variables_initializer())
         self.saver = tf.train.Saver(max_to_keep=5)
+        self.name = name
 
     def multilayer_perceptron(self, x, weights, biases, keep_prob):
         layer_1 = tf.add(tf.matmul(x, weights['h1']), biases['b1'])
         layer_1 = tf.nn.relu(layer_1)
         layer_1 = tf.nn.dropout(layer_1, keep_prob)
-        out_layer = tf.matmul(layer_1, weights['out']) + biases['out']
+        # out_layer = tf.matmul(layer_1, weights['out']) + biases['out']
+        out_layer = tf.add(tf.matmul(layer_1, weights['out']), biases['out'], name='out_layer')
         self.predicter = tf.argmax(out_layer, 1, name='predictions')
         self.predict_proba = tf.nn.softmax(out_layer, name='predict_proba')
         return out_layer
 
     def beginning_values(self):
-        n_hidden_1 = 38
+        n_hidden_1 = 400
         n_input = self.input_len
-        n_classes = 3
+        n_classes = 1
 
         self.weights = {
             'h1': tf.Variable(tf.random_uniform([n_input, n_hidden_1])),
@@ -219,16 +285,17 @@ class NNRLBet:
         }
 
         self.keep_prob = tf.placeholder("float", name='keep_prob')
-        self.x = tf.placeholder("float", [None, n_input], name='input_x')
-        self.y = tf.placeholder("float", [None, n_classes], name='input_y')
+        self.x = tf.placeholder("float", [None, self.input_len], name='input_x')
+        self.y = tf.placeholder("float", name='input_y')
 
     def optimizer_cost(self):
         self.predictions = self.multilayer_perceptron(self.x, self.weights, self.biases, self.keep_prob)
-        self.cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=self.predictions, labels=self.y))
-        self.optimizer = tf.train.AdamOptimizer(learning_rate=0.0001).minimize(self.cost)
+        self.cost = tf.reduce_mean(self.predictions - self.y)
+        # self.cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=self.predictions, labels=self.y))
+        self.optimizer = tf.train.AdamOptimizer(learning_rate=0.001).minimize(self.cost)
 
-    def prep_data(self, data):
-        data['net_risk'] = data['self_risk'] - data['table_risk']
+    def prep_data(self, data, reward):
+
         data['action'] = 0
         data.loc[data.bet == 0, 'action'] = 1
         data.loc[data.bet == data.max_bet - data.curr_bet, 'action'] = 1
@@ -239,48 +306,59 @@ class NNRLBet:
         # data.loc[data.action > 20, 'action'] = 20
 
         train_x = data[
-            ['curr_bet', 'curr_money', 'curr_pot', 'remaining_players_tournament', 'net_risk',
-             'vips_1', 'vips_2', 'vips_3', 'vips_4', 'vips_5', ]]
+            ['curr_bet', 'curr_money', 'curr_pot', 'remaining_players_tournament', 'self_risk', 'table_risk',
+             'single_max_raise','vips_1', 'vips_2', 'vips_3', 'vips_4', 'vips_5', ]]
 
-        data['0'] = 0
-        data['1'] = 0
-        data['2'] = 0
-        data.loc[data.action == 0, '0'] = 1
-        data.loc[data.action == 1, '1'] = 1
-        data.loc[data.action == 2, '2'] = 1
-        train_y = data[['0', '1', '2']].values
+        train_x['0'] = 0
+        train_x['1'] = 0
+        train_x['2'] = 0
+        train_x.loc[data.action == 0, '0'] = 1
+        train_x.loc[data.action == 1, '1'] = 1
+        train_x.loc[data.action == 2, '2'] = 1
+        # train_y = np.array(list(reversed([reward * math.pow(0.9, i) for i in range(len(data))]))).reshape(
+        #     (len(data), 1))
+        train_y = reward.values
+
         return train_x, train_y
 
     def action(self, self_risk, table_risk, curr_money, max_bet, remaining_players_hand, curr_pot,
                remaining_players_tournament, hand_lowest_money, curr_bet, big_blind, single_max_raise, new_vips_list):
         try:
-            predict_array = pd.DataFrame({'curr_bet': curr_bet,
-                                          'curr_money': curr_money,
-                                          'curr_pot': curr_pot,
+            predict_array = pd.DataFrame({'curr_bet': [curr_bet] * 3,
+                                          'curr_money': [curr_money] * 3,
+                                          'curr_pot': [curr_pot] * 3,
                                           # 'hand_lowest_money': hand_lowest_money,
                                           # 'max_bet': max_bet,
-                                          'remaining_players_tournament': remaining_players_tournament,
-                                          'net_risk': self_risk - table_risk,
-                                          # 'self_risk': self_risk,
-                                          # 'single_max_raise': single_max_raise,
-                                          # 'table_risk': table_risk,
-                                          'vips_1': new_vips_list[0],
-                                          'vips_2': new_vips_list[1],
-                                          'vips_3': new_vips_list[2],
-                                          'vips_4': new_vips_list[3],
-                                          'vips_5': new_vips_list[4],
-                                          }, index=[0]).values
+                                          'remaining_players_tournament': [remaining_players_tournament] * 3,
+                                          # 'net_risk': [self_risk - table_risk] * 3,
+                                          'self_risk': [self_risk] * 3,
+                                          'single_max_raise': [single_max_raise] * 3,
+                                          'table_risk': [table_risk] * 3,
+                                          'vips_1': [new_vips_list[0]] * 3,
+                                          'vips_2': [new_vips_list[1]] * 3,
+                                          'vips_3': [new_vips_list[2]] * 3,
+                                          'vips_4': [new_vips_list[3]] * 3,
+                                          'vips_5': [new_vips_list[4]] * 3,
+                                          '0': [1, 0, 0],
+                                          '1': [0, 1, 0],
+                                          '2': [0, 0, 1]
+                                          }).values
         except Exception as e:
             print(curr_bet, curr_money, curr_pot)
             raise e
 
         # if curr_bet > 1000:
         #     print(curr_bet)
+        # print(predict_array)
 
-        action = self.sess.run([self.predicter], feed_dict={
+        rewards, prob = self.sess.run([self.predictions, self.predict_proba], feed_dict={
             self.x: predict_array,
             self.keep_prob: 1
-        })[0][0]
+        })
+
+        # print('rewards:', rewards)
+        action = rewards.argmax()
+        # print(action)
 
         if action == 0:
             act_action = 'fold'
@@ -291,20 +369,24 @@ class NNRLBet:
 
         else:
             act_action = 'raise'
-            bet = (max_bet - curr_bet) + np.random.randint(2, 10) * big_blind
+            bet = (max_bet - curr_bet) + np.random.randint(1, 3) * single_max_raise
 
         # print(act_action, bet)
         # TODO Set prob to choose random
         return act_action, bet
 
-    def train(self, x):
-        train_x, train_y = self.prep_data(x)
+    def train(self, x, reward):
+        train_x, train_y = self.prep_data(x, reward)
+        # print(train_x, train_y)
         _, c = self.sess.run([self.optimizer, self.cost, ],
                              feed_dict={
                                  self.x: train_x,
                                  self.y: train_y,
                                  self.keep_prob: 0.8
                              })
+
+    def save(self):
+        self.saver.save(self.sess, 'runs/{}/model'.format(self.name))
 
 
 if __name__ == '__main__':

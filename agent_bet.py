@@ -13,7 +13,7 @@ import time
 # TODO shuffle starting list on initialize
 
 class PokerAgentBet(PokerAgentBase):
-    def player_actions(self):
+    def player_actions(self, first):
         start_time = time.time()
 
         remove_list = []
@@ -44,32 +44,40 @@ class PokerAgentBet(PokerAgentBase):
                 if len(self.player_list) - len(remove_list) == 1:
                     break
                 continue
+
             # TODO this should all be on player?
             # player.curr_money -= bet
             self.curr_pot += bet
-            self.single_max_raise = max(self.single_max_raise, self.curr_max_bet - player.curr_bet)
+            self.single_max_raise = max(self.single_max_raise, bet - self.single_max_raise)
             self.curr_max_bet = max(self.curr_max_bet, player.curr_bet)
             if player.curr_bet > player.start_money:
                 raise (ValueError, 'more than money')
+            if not first:
+                if all([((player.curr_bet == self.curr_max_bet) | (player.curr_bet == player.start_money)) for player in
+                        self.player_list]):
+                    break
         [self.player_list.remove(player) for player in remove_list]
         self.times['player_action'] += (time.time() - start_time)
 
     def all_players_bet(self):
-        start_time = time.time()
-
-        unequal = False
-        for player in self.player_list:
-            if player.curr_bet == self.curr_max_bet:
-                unequal = False
-                continue
-            elif player.curr_bet >= player.curr_money:
-                unequal = False
-                continue
-            else:
-                unequal = True
-                break
-        self.times['all_players_bet'] += (time.time() - start_time)
-        return unequal
+        # start_time = time.time()
+        # # TODO Something going wrong here
+        #
+        # unequal = False
+        #
+        # for player in self.player_list:
+        #     if player.curr_bet == self.curr_max_bet:
+        #         unequal = False
+        #         continue
+        #     elif player.curr_bet >= player.curr_money:
+        #         unequal = False
+        #         continue
+        #     else:
+        #         unequal = True
+        #         break
+        # self.times['all_players_bet'] += (time.time() - start_time)
+        return all([((player.curr_bet == self.curr_max_bet) | (player.curr_bet == player.start_money)) for player in
+                    self.player_list])
 
     def initialize_game(self):
         start_time = time.time()
@@ -80,8 +88,10 @@ class PokerAgentBet(PokerAgentBase):
             player.start_money = player.curr_money
             player.curr_bet = 0
             player.game_hands = []
+            player.random_game = True if np.random.randint(0,100) > 5 else False
         self.player_list = self.starting_player_list
         self.curr_pot = 0
+        self.table_cards = []
         self.curr_pot = self.big_blind + self.small_blind
         # self.curr_max_bet = self.big_blind
         self.single_max_raise = self.big_blind
@@ -106,7 +116,7 @@ class PokerAgentBet(PokerAgentBase):
 
             # print('Starting location:' , [player.name for player in self.starting_player_list])
             # print('Dealer Location:',[player.name for player in self.player_list], big_blind_pos, small_blind_pos)
-
+        #TODO DO this for RL
         self.starting_player_list[big_blind_pos].curr_bet = min(self.big_blind,
                                                                 self.starting_player_list[big_blind_pos].start_money)
         self.starting_player_list[big_blind_pos].curr_money -= min(self.big_blind,
@@ -124,10 +134,12 @@ class PokerAgentBet(PokerAgentBase):
         start_time = time.time()
 
         if len(self.player_list) > 1:
-            unequal = True
-            while unequal:
-                self.player_actions()
-                unequal = self.all_players_bet()
+            equal = False
+            first = True
+            while not equal:
+                self.player_actions(first)
+                equal = self.all_players_bet()
+                first = False
 
     def side_pool(self):
         start_time = time.time()
@@ -200,7 +212,7 @@ class PokerAgentBet(PokerAgentBase):
         # while loop if all players not on same amount - stick in betting so not infinite loop
         # insert bet
         self.run_betting()
-        self.table_cards = self.pick_cards(3)
+        self.table_cards += self.pick_cards(3)
         self.fill_in_state('flop_state')
         # insert bet
         self.run_betting()
@@ -248,6 +260,7 @@ def simulate_tournaments(n):
         winner = pkr.run_tournament()[0]
         simulate.append(winner.tournament_hands)
         winners.append(winner.name)
+        print(i)
     # TODO Better way for this
     flat_list = [item for sublist in simulate for item in sublist]
     df = pd.DataFrame(flat_list)
@@ -261,7 +274,7 @@ if __name__ == '__main__':
     import time
 
     game_obj = PokerAgentBet(5)
-    print(game_obj.run_tournament_rl()[0].name)
+    simulate_tournaments(50)
     # for i in range(3):
     # start_time = time.time()
     # simulate_tournaments(100)

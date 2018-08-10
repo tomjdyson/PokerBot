@@ -1,6 +1,8 @@
 import numpy as np
 from collections import Counter
-from PokerBot.poker_player import PokerPlayer
+from PokerBot.poker_player import PokerPlayer, QPokerPlayer
+from PokerBot.nfsp import NFSP
+from PokerBot.player_bet import SimpleBet, SimpleModelBet, SimpleNNBet, NNRLBet, RandomBet, LoadRLNNBet
 from random import shuffle, randint
 import pandas as pd
 import time
@@ -9,11 +11,22 @@ from scipy import sparse
 
 class PokerAgentBase:
     def __init__(self, num_players, action_clf=None, bet_clf=None):
-        self.player_1 = PokerPlayer('a')
-        self.player_2 = PokerPlayer('b')
-        self.player_3 = PokerPlayer('c')
-        self.player_4 = PokerPlayer('d')
-        self.player_5 = PokerPlayer('f')
+        # self.player_1 = PokerPlayer('a', bet_style='simple')
+        # self.player_2 = PokerPlayer('b', bet_style='simple')
+        # self.player_3 = PokerPlayer('c', bet_style='simple')
+        # self.player_4 = PokerPlayer('d', bet_style='simple')
+        # self.player_5 = PokerPlayer('f', bet_obj=LoadRLNNBet('a'))
+        # self.player_1 = PokerPlayer('a', bet_obj=NNRLBet(15, 'a'), keep_rate=0.2)
+        # self.player_2 = PokerPlayer('b', bet_obj=NNRLBet(15, 'b'), keep_rate=0.2)
+        # self.player_3 = PokerPlayer('c', bet_obj=NNRLBet(15, 'c'), keep_rate=0.2)
+        # self.player_4 = PokerPlayer('d', bet_obj=NNRLBet(15, 'd'), keep_rate=0.2)
+        # self.player_5 = PokerPlayer('f', bet_obj=NNRLBet(15, 'f'), keep_rate=0.2)
+        self.player_1 = QPokerPlayer('a', history_length=10, betting_obj=NFSP())
+        self.player_2 = QPokerPlayer('b', history_length=10, betting_obj=NFSP())
+        self.player_3 = QPokerPlayer('c', history_length=10, betting_obj=NFSP())
+        self.player_4 = QPokerPlayer('d', history_length=10, betting_obj=NFSP())
+        self.player_5 = QPokerPlayer('f', history_length=10, betting_obj=NFSP())
+
         # self.player_5 = PokerPlayer('f', bet_style='model', action_clf=action_clf, bet_clf=bet_clf)
         # todo setter
         self.player_list = [self.player_1, self.player_2, self.player_3, self.player_4, self.player_5][0:num_players]
@@ -25,7 +38,7 @@ class PokerAgentBase:
         self.curr_cards = None
         self.remaining_cards = None
         self.all_cards = self.create_cards()
-        self.table_cards = None
+        self.table_cards = []
         self.curr_bets = None
         self.update_list = []
         self.curr_pot = self.big_blind + self.small_blind
@@ -33,6 +46,8 @@ class PokerAgentBase:
         self.curr_max_bet = 0
         self.single_max_raise = 0
         self.game_state = None
+        self.action_history = []
+        self.bet_history = []
         self.pair_dict = {0: 9, 1: 8, 2: 7, 3: 7}
         self.kind_dict = {1: 9, 2: 9, 3: 6, 4: 2}
         self.times = {'player_action': 0, 'initialize': 0, 'side_pool': 0, 'handle_money': 0, 'all_players_bet': 0,
