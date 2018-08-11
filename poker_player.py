@@ -163,6 +163,7 @@ class QPokerPlayer:
         self.action_list = []
         self.bet_list = []
         self.state_list = []
+        self.state_record = {'leave': [], 'play': []}
         self.epsilon = 0.1
         self.history_length = history_length
         self.personal_history = [-2 for i in range(history_length)]
@@ -201,7 +202,8 @@ class QPokerPlayer:
         # if random.uniform(0, 1) > self.epsilon:
         # print(self.curr_hand, table_cards)
         action, action_values = self.betting_obj.action(self.curr_hand, table_cards,
-                                         self.personal_history, opponent_history, self.curr_state, self.curr_bet)
+                                                        self.personal_history, opponent_history, self.curr_state,
+                                                        self.curr_bet)
         # else:
         #     # TODO Move random into here
         #     action = np.random.randint(0, 3)
@@ -209,15 +211,20 @@ class QPokerPlayer:
         if action == 0:
             self.previous_action = 'fold'
             self.bet = 0
+            self.state_record['leave'].append(self.curr_state[0:5])
             if current_max_bet == self.curr_bet:
                 self.previous_action = 'call'
         elif action == 1:
             self.previous_action = 'call'
             self.bet = current_max_bet - self.curr_bet
+            self.state_record['play'].append(self.curr_state[0:5])
+
         elif action == 2:
             self.previous_action = 'raise'
             # self.bet = (current_max_bet - self.curr_bet) + np.random.randint(1, 3) * single_max_raise
             self.bet = (current_max_bet - self.curr_bet) + single_max_raise
+            self.state_record['play'].append(self.curr_state[0:5])
+
 
         if self.bet > self.curr_money:
 

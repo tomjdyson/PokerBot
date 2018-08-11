@@ -61,20 +61,30 @@ class PokerAgentBetRL(PokerAgentBet):
             game_hands_pd['reward'] = reward_list
             player.game_hands_list.append(game_hands_pd)
 
+    def player_delay_reward(self, player):
+        reward = player.curr_money - player.start_money
+        delayed_reward = list(
+                reversed([reward * math.pow(0.9, i) for i in range(len(player.simple_action_history))]))
+        return delayed_reward
+
+
     def run_tournament_rl(self):
         hand_counter = 1
         hand_actions = []
         while len(self.starting_player_list) > 1:
             # print(hand/_counter)
             result, winner = self.run_game_rl()
+
             for player in winner:
                 player.win_reward_history.append(self.curr_pot - player.pot_minus_1)
                 if len(player.betting_obj.state_memory) > 0:
-                    player.betting_obj.save_data(player.simple_action_history, player.win_reward_history)
+                    # player.betting_obj.save_data(player.simple_action_history, player.win_reward_history)
+                    player.betting_obj.save_data(player.simple_action_history, self.player_delay_reward(player))
             for player in self.starting_player_list:
                 if len(player.betting_obj.state_memory) > 0:
                     if player not in winner:
-                        player.betting_obj.save_data(player.simple_action_history, player.lose_reward_history)
+                        # player.betting_obj.save_data(player.simple_action_history, player.lose_reward_history)
+                        player.betting_obj.save_data(player.simple_action_history, self.player_delay_reward(player))
                 # print(player.name, player.curr_money, player.curr_bet, self.curr_pot)
                 # self.rl_reward_won_lost(player)
                 action_len = len(player.action_list)
@@ -83,7 +93,6 @@ class PokerAgentBetRL(PokerAgentBet):
                     {'hand_counter': [hand_counter] * action_len, 'hand': [player.curr_hand] * action_len,
                      'action': player.action_list, 'bet': player.bet_list, 'name': [player.name] * action_len,
                      'table_card': [self.table_cards] * action_len, 'state': player.state_list,
-                     'action_values': player.action_value_list[0:action_len]
                      # 'win_reward': player.win_reward_history, 'lose_reward': player.lose_reward_history
                      }))
                 player.bet_list = []
@@ -126,6 +135,8 @@ class PokerAgentBetRL(PokerAgentBet):
             player.action_history = []
             player.simple_action_history = []
             player.reward_history = []
+            player.state_record = {'leave': [], 'play': []}
+            player.action_value_list = []
             # if rand_start:
             #     player.start_money = np.random.randint(100, 10000)
             #     player.curr_money = player.start_money
@@ -247,6 +258,21 @@ class PokerAgentBetRL(PokerAgentBet):
         self.handle_money(result, player_list)
         return result, player_list
 
+    def hand_statistics(self):
+        for player in self.frozen_player_list:
+            play_df = pd.DataFrame(player.state_record['play'])
+            leave_df = pd.DataFrame(player.state_record['leave'])
+            print(player.name)
+            summ_list = []
+            try:
+                for i in range(1, 5):
+                    i_play = play_df.groupby(i)[i].count()
+                    i_leave = leave_df.groupby(i)[i].count()
+                    summ_list.append(i_play / (i_play + i_leave))
+                print(pd.concat(summ_list, axis=1))
+            except Exception as e:
+                print(e)
+
     def simulate_tournaments_rl(self, n):
         self.frozen_player_list = self.starting_player_list
         winner_list = []
@@ -258,6 +284,7 @@ class PokerAgentBetRL(PokerAgentBet):
             hand_history_df = pd.concat(hand_list, axis=0)
             hand_history_df.to_csv('hand_history.csv')
             winner_list.append(winner.name)
+            self.hand_statistics()
             if (len(winner_list) % 50 == 0) & (len(winner_list) > 1):
                 last_50 = winner_list[-50:]
                 last_50_count = Counter(last_50)

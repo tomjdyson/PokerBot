@@ -8,15 +8,15 @@ import pandas as pd
 
 # TODO Set high initial estimates for Q-values - optimistic initialisation
 # TODO Soft selection, sometimes select non highest q value
-# TODO Change checking - doesnt work on new hand
 # TODO Add in ar model again
 # TODO Try increased net size
-# TODO Fold reward > 0
 # TODO Randomise money
+# TODO Recurrant
+# TODO Pseudo counts
 
 class NFSP:
-    def __init__(self, bellman_value=0.95, rl_buffer_size=40000, sl_buffer_size=100000, batch_size=1028, n_hidden=64,
-                 state_size=11, anticipatory=1, epsilon=0.08):
+    def __init__(self, bellman_value=0.95, rl_buffer_size=40000, sl_buffer_size=100000, batch_size=128, n_hidden=64,
+                 state_size=11, anticipatory=1, epsilon=0.2):
         self.card_map = self.create_card_map()
         self.state_memory = []
         self.rl_memory = []
@@ -119,46 +119,71 @@ class NFSP:
         return np.argmax(action), action
 
     def save_data(self, action_history, reward_history):
-        # print(action_history, reward_history)
-        target_q = self.q_br_model.predict(np.array(self.state_memory))
         for i in range(len(self.state_memory)):
-            # potential to not work
             if i == len(self.state_memory) - 1:
-                state_reward = reward_history[i]
+                self.rl_memory.append(
+                    (self.state_memory[i], action_history[i], reward_history[i], 0))
             else:
-                state_reward = reward_history[i] + self.bellman_value * self.q_br_model.predict(
-                    np.array(self.state_memory[i + 1]).reshape(self.state_size)).max()
-                # print('reward_diff:',reward_history[i], state_reward )
-            current_action = action_history[i]
-            # print(state_reward)
-            # could mess up
-            target_q[i][current_action] = state_reward
-            # print(self.state_memory[i], target_q[i])
-            self.rl_memory.append((self.state_memory[i], target_q[i]))
+                self.rl_memory.append(
+                    (self.state_memory[i], action_history[i], reward_history[i], self.state_memory[i + 1]))
+        if len(self.rl_memory) > self.rl_buffer_size:
+            self.rl_memory = self.rl_memory[-self.rl_buffer_size:]
+            # def save_data(self, action_history, reward_history):
+            #   # print(action_history, reward_history)
+            #   target_q = self.q_br_model.predict(np.array(self.state_memory))
+            #   for i in range(len(self.state_memory)):
+            #       # potential to not work
+            #       if i == len(self.state_memory) - 1:
+            #           state_reward = reward_history[i]
+            #       else:
+            #           state_reward = reward_history[i] + self.bellman_value * self.q_br_model.predict(
+            #               np.array(self.state_memory[i + 1]).reshape(self.state_size)).max()
+            #           # print('reward_diff:',reward_history[i], state_reward )
+            #       current_action = action_history[i]
+            #       # print(state_reward)
+            #       # could mess up
+            #       target_q[i][current_action] = state_reward
+            #       # print(self.state_memory[i], target_q[i])
+            #       self.rl_memory.append((self.state_memory[i], target_q[i]))
+            #
+
+    def load_br_data(self, batch):
+        train_x = []
+        train_y = []
+        for i in batch:
+            target_q = self.q_br_model.predict(np.array(i[0]).reshape(self.state_size))[0]
+            if i[3] == 0:
+                state_reward = i[2]
+            else:
+                state_reward = i[2] + self.bellman_value * self.q_br_model.predict(
+                    np.array(np.array(i[3])).reshape(self.state_size)).max()
+            target_q[i[1]] = state_reward
+            train_x.append(i[0])
+            train_y.append(target_q)
+        return train_x, train_y
 
     def load_data(self, memory):
+
         if len(memory) < self.batch_size:
             idx = np.random.choice(range(len(memory)), len(memory), False)
         else:
             idx = np.random.choice(range(len(memory)), self.batch_size, False)
-        train_x = [memory[i][0] for i in idx]
-        train_y = [memory[i][1] for i in idx]
-        return train_x, train_y
+        # train_x = [memory[i][0] for i in idx]
+        # train_y = [memory[i][1] for i in idx]
+        return [memory[i] for i in idx]
 
     def train_br(self):
-        if len(self.rl_memory) > self.rl_buffer_size:
-            self.rl_memory = self.rl_memory[-self.rl_buffer_size:]
-        train_x, train_y = self.load_data(self.rl_memory)
+        batch = self.load_data(self.rl_memory)
+        train_x, train_y = self.load_br_data(batch)
         pd.DataFrame(np.concatenate((np.array(train_x), np.array(train_y)), axis=1)).to_csv('action_reward.csv')
         self.br_model.fit(np.array(train_x), np.array(train_y), epochs=2, verbose=2)
-        self.epsilon *= 0.999
+        self.epsilon *= 0.99
 
     def train_ar(self):
         if len(self.sl_memory) > self.sl_buffer_size:
             self.sl_memory = self.sl_memory[-self.sl_buffer_size:]
         train_x, train_y = self.load_data(self.sl_memory)
         self.ar_model.fit(np.array(train_x), np.array(train_y), epochs=2, verbose=2)
-
 
     def train_q_br(self):
         weights = self.br_model.get_weights()
@@ -168,7 +193,7 @@ class NFSP:
         self.q_br_model.set_weights(target_weights)
 
     def swap(self, dominant_player):
-        #todo should do merge
+        # todo should do merge
         weights = dominant_player.br_model.get_weights()
         target_weights = self.br_model.get_weights()
         for i in range(len(target_weights)):
